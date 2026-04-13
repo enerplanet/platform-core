@@ -1,0 +1,22 @@
+# Local development overrides for platform-core
+# Unsets KC_HOSTNAME so Keycloak derives the OIDC issuer from the request URL.
+# Overrides production KEYCLOAK_URL to use Docker-internal hostname.
+# Note: KC_HTTP_RELATIVE_PATH=/keycloak is set in the base compose.
+services:
+  keycloak:
+    environment:
+      KC_HOSTNAME: ""
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "false"
+
+  keycloak-init:
+    environment:
+      KEYCLOAK_URL: http://keycloak:8080/keycloak
+      SERVER_URL: http://localhost:8000
+
+  auth-service:
+    environment:
+      KEYCLOAK_URL: http://keycloak:8080/keycloak
+
+  webservice:
+    environment:
+      KEYCLOAK_URL: http://keycloak:8080/keycloak

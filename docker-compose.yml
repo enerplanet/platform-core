@@ -1,0 +1,167 @@
+services:
+  postgres:
+    image: pgrouting/pgrouting:17-3.5-3.7.3
+    container_name: postgres
+    restart: unless-stopped
+    shm_size: '2gb'
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_DATABASE:-spatialai}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - spatialhub-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - spatialhub-net
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.6
+    container_name: keycloak
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/spatialai
+      KC_DB_USERNAME: ${DB_USERNAME:-postgres}
+      KC_DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      KC_HEALTH_ENABLED: "true"
+      KC_HOSTNAME: ${KC_HOSTNAME:-localhost}
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: "xforwarded"
+      KC_HTTP_RELATIVE_PATH: /keycloak
+    volumes:
+      - ./auth-service/keycloak/storcito:/opt/keycloak/themes/spatialhub:ro
+    command: start-dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - spatialhub-net
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/localhost/8080' || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  keycloak-init:
+    image: alpine:latest
+    container_name: keycloak-init
+    volumes:
+      - ./auth-service/keycloak:/opt/keycloak/data/import:ro
+      - ../enerplanet/backend:/backend-config
+      - ./auth-service:/auth-service-config
+      - ./webservice:/webservice-config
+      - ./geoserver:/geoserver-config
+    environment:
+      KEYCLOAK_ADMIN_USER: ${KEYCLOAK_ADMIN_USER:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      SERVER_URL: ${SERVER_URL:-http://localhost:8000}
+      KEYCLOAK_URL: http://keycloak:8080/keycloak
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        apk add --no-cache curl jq bash
+        cp /opt/keycloak/data/import/init-keycloak.sh /tmp/init-keycloak.sh
+        chmod +x /tmp/init-keycloak.sh
+        /tmp/init-keycloak.sh
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - spatialhub-net
+
+  auth-service:
+    build:
+      context: ..
+      dockerfile: platform-core/auth-service/Dockerfile
+    container_name: auth-service
+    restart: unless-stopped
+    env_file:
+      - ./auth-service/.env
+    ports:
+      - "8001:8001"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      REDIS_HOST: redis
+      KEYCLOAK_URL: http://keycloak:8080/keycloak
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak-init:
+        condition: service_completed_successfully
+    networks:
+      - spatialhub-net
+
+  webservice:
+    build:
+      context: ..
+      dockerfile: platform-core/webservice/Dockerfile
+    container_name: webservice
+    restart: unless-stopped
+    env_file:
+      - ./webservice/.env
+    ports:
+      - "8082:8082"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      REDIS_HOST: redis
+      KEYCLOAK_URL: http://keycloak:8080/keycloak
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak-init:
+        condition: service_completed_successfully
+    networks:
+      - spatialhub-net
+
+  geoservice:
+    build:
+      context: ..
+      dockerfile: platform-core/geoserver/Dockerfile
+    container_name: geoservice
+    restart: unless-stopped
+    env_file:
+      - ./geoserver/.env
+    ports:
+      - "8083:8083"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak-init:
+        condition: service_completed_successfully
+    networks:
+      - spatialhub-net
+
+volumes:
+  postgres-data:
+
+networks:
+  spatialhub-net:
+    name: spatialhub-net
+    external: true
