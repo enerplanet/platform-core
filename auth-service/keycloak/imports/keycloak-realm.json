@@ -1,0 +1,266 @@
+{
+  "realm": "spatialhub",
+  "enabled": true,
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "verifyEmail": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "displayName": "enerplanet Application",
+  "displayNameHtml": "<div class=\"kc-logo-text\"><span>EnerPlanET</span></div>",
+  "loginTheme": "spatialhub",
+  "emailTheme": "spatialhub",
+  "accountTheme": "spatialhub",
+  "adminTheme": "keycloak.v2",
+  "accessTokenLifespan": 3600,
+  "accessTokenLifespanForImplicitFlow": 3600,
+  "ssoSessionIdleTimeout": 7200,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 2592000,
+  "offlineSessionMaxLifespanEnabled": false,
+  "clients": [
+    {
+      "clientId": "spatialhub",
+      "name": "enerplanet Application",
+      "description": "Main application client for enerplanet wildfire monitoring system",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "**********",
+      "redirectUris": [
+        "http://localhost/*",
+        "http://localhost/callback-auth",
+        "http://localhost:3000/*",
+        "http://localhost:3000/callback-auth",
+        "http://localhost:8001/*"
+      ],
+      "webOrigins": [
+        "http://localhost",
+        "http://localhost:3000",
+        "http://localhost:8001"
+      ],
+      "rootUrl": "http://localhost",
+      "baseUrl": "http://localhost",
+      "adminUrl": "http://localhost",
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": true,
+      "authorizationServicesEnabled": false,
+      "fullScopeAllowed": true,
+      "nodeReRegistrationTimeout": -1,
+      "attributes": {
+        "access.token.lifespan": "3600",
+        "client.secret.creation.time": "1696000000",
+        "oauth2.device.authorization.grant.enabled": "false",
+        "oidc.ciba.grant.enabled": "false",
+        "backchannel.logout.session.required": "true",
+        "backchannel.logout.revoke.offline.tokens": "false",
+        "post.logout.redirect.uris": "http://localhost/*"
+      },
+      "authenticationFlowBindingOverrides": {},
+      "protocolMappers": [
+        {
+          "name": "email",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "email",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "email",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "email_verified",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "emailVerified",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "email_verified",
+            "jsonType.label": "boolean"
+          }
+        },
+        {
+          "name": "fullName",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "fullName",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "fullName",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "access_level",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "access_level",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "access_level",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "organization",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "organization",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "organization",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "position",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "position",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "position",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "phone",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "phone",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "phone",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "model_limit",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "model_limit",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "model_limit",
+            "jsonType.label": "int"
+          }
+        }
+      ]
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "openid",
+      "description": "OpenID Connect built-in scope: openid",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      }
+    },
+    {
+      "name": "profile",
+      "description": "OpenID Connect built-in scope: profile",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${profileScopeConsentText}"
+      }
+    },
+    {
+      "name": "email",
+      "description": "OpenID Connect built-in scope: email",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${emailScopeConsentText}"
+      }
+    }
+  ],
+  "defaultDefaultClientScopes": [
+    "openid",
+    "profile",
+    "email"
+  ],
+  "users": [
+    {
+      "username": "service-account-spatialhub",
+      "enabled": true,
+      "serviceAccountClientId": "spatialhub",
+      "clientRoles": {
+        "realm-management": [
+          "manage-users",
+          "view-users",
+          "query-users",
+          "query-groups"
+        ]
+      }
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "user",
+        "description": "Standard user role",
+        "composite": false
+      },
+      {
+        "name": "admin",
+        "description": "Administrator role",
+        "composite": false
+      }
+    ]
+  },
+  "requiredActions": [
+    {
+      "alias": "VERIFY_EMAIL",
+      "name": "Verify Email",
+      "providerId": "VERIFY_EMAIL",
+      "enabled": true
+    },
+    {
+      "alias": "UPDATE_PASSWORD",
+      "name": "Update Password",
+      "providerId": "UPDATE_PASSWORD",
+      "enabled": true
+    },
+    {
+      "alias": "UPDATE_PROFILE",
+      "name": "Update Profile",
+      "providerId": "UPDATE_PROFILE",
+      "enabled": true
+    }
+  ],
+  "smtpServer": {},
+  "attributes": {
+    "userProfileEnabled": "true",
+    "userProfileConfiguration": "{\"attributes\":[{\"name\":\"username\",\"displayName\":\"${username}\",\"validations\":{\"length\":{\"min\":3,\"max\":255},\"username-prohibited-characters\":{},\"up-username-not-idn-homograph\":{}},\"annotations\":{\"group\":\"user-metadata\",\"inputType\":\"hidden\"},\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]},\"multivalued\":false},{\"name\":\"fullName\",\"displayName\":\"Full Name\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"annotations\":{\"inputType\":\"text\",\"inputHelperText\":\"Enter your full name\",\"group\":\"user-metadata\"},\"required\":{\"roles\":[\"user\"]},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"organization\",\"displayName\":\"Organization\",\"annotations\":{\"inputType\":\"text\",\"inputHelperText\":\"Enter your organization name\",\"group\":\"organization-info\"},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"position\",\"displayName\":\"Position\",\"annotations\":{\"inputType\":\"text\",\"inputHelperText\":\"Enter your job title or role\",\"group\":\"organization-info\"},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"phone\",\"displayName\":\"Phone Number\",\"annotations\":{\"inputType\":\"tel\",\"inputHelperText\":\"Enter a valid phone number\",\"group\":\"contact-info\"},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"email\",\"displayName\":\"${email}\",\"validations\":{\"email\":{},\"length\":{\"max\":255}},\"annotations\":{\"group\":\"user-metadata\"},\"required\":{\"roles\":[\"user\"]},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"access_level\",\"displayName\":\"Access Level\",\"annotations\":{\"inputType\":\"text\",\"inputHelperText\":\"Internal field for system-level access\",\"group\":\"system-access\"},\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]},\"multivalued\":false},{\"name\":\"model_limit\",\"displayName\":\"Model Limit\",\"annotations\":{\"inputType\":\"number\",\"inputHelperText\":\"Custom model creation limit (0 = unlimited)\",\"group\":\"system-access\"},\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]},\"multivalued\":false}],\"groups\":[{\"name\":\"user-metadata\",\"displayHeader\":\"User Metadata\",\"displayDescription\":\"Basic user identity fields\"},{\"name\":\"organization-info\",\"displayHeader\":\"Organization Information\",\"displayDescription\":\"Workplace details\"},{\"name\":\"contact-info\",\"displayHeader\":\"Contact Information\",\"displayDescription\":\"Phone or other communication details\"},{\"name\":\"system-access\",\"displayHeader\":\"System Access\",\"displayDescription\":\"Internal system-level information\"}]}"
+  },
+  "clientSessionIdleTimeout": 7200,
+  "clientSessionMaxLifespan": 36000
+}
