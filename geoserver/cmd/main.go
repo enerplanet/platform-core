@@ -95,5 +95,6 @@ func registerRoutes(r *gin.Engine, deps *appDependencies) {
 		internal.DELETE("/results/:id/layer", handler.DeleteLayer)
 		internal.GET("/results/:id/bounds", handler.GetBounds)
 		internal.POST("/results/:id/sample-distribution", handler.SampleDistribution)
+		internal.POST("/results/:id/sample-grid", handler.SampleGrid)
 	}
 }

@@ -14,7 +14,7 @@ USERNAME="admin"
 PASSWORD="geoserver"
 WORKSPACE="fire_risk"
 STYLE_NAME="fire_risk_classified"
-NETWORK="spatialhub-network"
+NETWORK="spatialhub-net"
 
 # Logging
 log() { echo "[$(date '+%H:%M:%S')] $1"; }

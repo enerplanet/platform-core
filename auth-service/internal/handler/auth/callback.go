@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 
-	"platform.local/auth-service/internal/middleware"
 	"platform.local/auth-service/internal/store"
 	"platform.local/common/pkg/httputil"
 	platformsession "platform.local/platform/session"
@@ -66,13 +65,7 @@ func (a *AuthHandler) Callback(c *gin.Context) {
 		return
 	}
 
-	cookieMaxAge := a.cfg.SessionTTLMinutes * 60
-
-	a.setSecureCookie(c, "session_id", sessionID, cookieMaxAge, true)
-	a.setSecureCookie(c, "user_email", userInfoClaims.Email, cookieMaxAge, false)
-
-	csrfToken := middleware.GenerateCSRFToken()
-	a.setSecureCookie(c, "csrf_token", csrfToken, cookieMaxAge, false)
+	a.setLoginCookies(c, sessionID, userInfoClaims.Email)
 
 	c.Redirect(http.StatusTemporaryRedirect, "/success-login")
 }

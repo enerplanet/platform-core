@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"platform.local/auth-service/internal/config"
+	"platform.local/auth-service/internal/middleware"
 	"platform.local/auth-service/internal/store"
 	"platform.local/common/pkg/constants"
 	"platform.local/common/pkg/httputil"
@@ -67,34 +68,26 @@ func generateSecureSessionID() string {
 }
 
 func (a *AuthHandler) setSecureCookie(c *gin.Context, name, value string, maxAge int, httpOnly bool) {
-	isProduction := a.cfg.AppEnv == "production"
-	isSecure := isProduction || c.Request.Header.Get("X-Forwarded-Proto") == "https" || c.Request.TLS != nil
+	httputil.SetAuthCookie(c, a.cookieOptions(), name, value, maxAge, httpOnly)
+}
 
-	// Use SameSite Strict for session cookies, Lax for others
-	sameSite := http.SameSiteLaxMode
-	if name == "session_id" {
-		sameSite = http.SameSiteStrictMode
+func (a *AuthHandler) setLoginCookies(c *gin.Context, sessionID, email string) {
+	cookieMaxAge := a.cfg.SessionTTLMinutes * 60
+	a.clearAuthCookies(c)
+	a.setSecureCookie(c, "session_id", sessionID, cookieMaxAge, true)
+	a.setSecureCookie(c, "user_email", email, cookieMaxAge, false)
+	a.setSecureCookie(c, "csrf_token", middleware.GenerateCSRFToken(), cookieMaxAge, false)
+}
+
+func (a *AuthHandler) clearAuthCookies(c *gin.Context) {
+	httputil.ClearAuthCookies(c, a.cookieOptions())
+}
+
+func (a *AuthHandler) cookieOptions() httputil.CookieOptions {
+	return httputil.CookieOptions{
+		Domain:       a.cfg.CookieDomain,
+		IsProduction: a.cfg.AppEnv == "production",
 	}
-
-	domain := a.cfg.CookieDomain
-	if domain == "localhost" || domain == "" {
-		domain = ""
-	}
-
-	// - session_id: HttpOnly=true
-	// - user_email: HttpOnly=false
-	cookie := &http.Cookie{
-		Name:     name,
-		Value:    value,
-		MaxAge:   maxAge,
-		Path:     "/",
-		Domain:   domain,
-		Secure:   isSecure,
-		HttpOnly: httpOnly,
-		SameSite: sameSite,
-	}
-
-	http.SetCookie(c.Writer, cookie)
 }
 
 func New(cfg *config.Config, serverAddr string, authClient *auth.Client, authStore store.AuthStore, sessionStore platformsession.SessionStore, adminTokenProvider *auth.AdminTokenProvider, loginLockout LoginLockout) *AuthHandler {
@@ -189,16 +182,17 @@ func (a *AuthHandler) doGetUserDataFromKeycloak(userID string) (*struct {
 	if err != nil {
 		return nil, err
 	}
-	        defer resp.Body.Close()
+	defer resp.Body.Close()
 
-	        if resp.StatusCode != http.StatusOK {
-	                if resp.StatusCode == http.StatusUnauthorized {
-	                        a.adminTokenProvider.Invalidate()
-	                }
-	                return nil, fmt.Errorf("keycloak returned status %d", resp.StatusCode)
-	        }
+	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusUnauthorized {
+			a.adminTokenProvider.Invalidate()
+		}
+		return nil, fmt.Errorf("keycloak returned status %d", resp.StatusCode)
+	}
 
-	        var userData struct {		Email      string              `json:"email"`
+	var userData struct {
+		Email      string              `json:"email"`
 		Attributes map[string][]string `json:"attributes"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&userData); err != nil {
@@ -484,24 +478,24 @@ func (a *AuthHandler) authenticateWithKeycloak(c *gin.Context, email, password s
 	}).Debug("Keycloak token request")
 
 	resp, err := a.httpClient.Post(tokenURL, "application/x-www-form-urlencoded", strings.NewReader(encodedForm))
-	                        if err != nil {
-	                                platformlogger.WithFields(map[string]any{"component": "auth", "error": err}).Error("failed to connect to auth server")
-	                                httputil.BadGateway(c, "failed to connect to auth server")
-	                                return nil, false
-	                        }
-	                        defer func() { _ = resp.Body.Close() }()
-	                
-	                                if resp.StatusCode != http.StatusOK {
-	                                        handled := a.handleKeycloakAuthError(c, resp, email)
-	                                        return nil, handled
-	                                }
-	                        
-	                                var tokenResponse struct {
-	                                        AccessToken  string `json:"access_token"`
-	                                        RefreshToken string `json:"refresh_token"`
-	                                        ExpiresIn    int    `json:"expires_in"`
-	                                        TokenType    string `json:"token_type"`
-	                                }
+	if err != nil {
+		platformlogger.WithFields(map[string]any{"component": "auth", "error": err}).Error("failed to connect to auth server")
+		httputil.BadGateway(c, "failed to connect to auth server")
+		return nil, false
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		handled := a.handleKeycloakAuthError(c, resp, email)
+		return nil, handled
+	}
+
+	var tokenResponse struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresIn    int    `json:"expires_in"`
+		TokenType    string `json:"token_type"`
+	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResponse); err != nil {
 		httputil.InternalError(c, "failed to parse token response")
@@ -775,9 +769,7 @@ func (a *AuthHandler) createUserSession(c *gin.Context, userInfo *struct {
 		return ""
 	}
 
-	cookieMaxAge := a.cfg.SessionTTLMinutes * 60
-	a.setSecureCookie(c, "session_id", sessionID, cookieMaxAge, true)
-	a.setSecureCookie(c, "user_email", userInfo.Email, cookieMaxAge, false)
+	a.setLoginCookies(c, sessionID, userInfo.Email)
 
 	return sessionID
 }
@@ -811,13 +803,11 @@ func (a *AuthHandler) sendLoginSuccessResponse(c *gin.Context, userInfo *struct 
 }
 
 func (a *AuthHandler) Logout(c *gin.Context) {
-	sessionID, err := c.Cookie("session_id")
-	if err == nil && sessionID != "" {
+	for _, sessionID := range httputil.GetSessionCookieValues(c) {
 		_ = a.sessionStore.DeleteSession(c, sessionID)
 	}
 
-	a.setSecureCookie(c, "session_id", "", -1, true)
-	a.setSecureCookie(c, "user_email", "", -1, false)
+	a.clearAuthCookies(c)
 	httputil.SuccessMessage(c, "logged out")
 }
 
@@ -833,15 +823,16 @@ func (a *AuthHandler) fetchKeycloakUser(userID string, target interface{}) error
 	if err != nil {
 		return err
 	}
-	        defer func() { _ = resp.Body.Close() }()
-	        if resp.StatusCode != http.StatusOK {
-	                if resp.StatusCode == http.StatusUnauthorized {
-	                        a.adminTokenProvider.Invalidate()
-	                }
-	                body, _ := io.ReadAll(resp.Body)
-	                return fmt.Errorf("keycloak get user failed: %s", string(body))
-	        }
-	        return json.NewDecoder(resp.Body).Decode(target)}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusUnauthorized {
+			a.adminTokenProvider.Invalidate()
+		}
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("keycloak get user failed: %s", string(body))
+	}
+	return json.NewDecoder(resp.Body).Decode(target)
+}
 
 func (a *AuthHandler) fetchTourAttributeFromKeycloak(userID string) (bool, error) {
 	var userRep struct {
@@ -873,49 +864,49 @@ func (a *AuthHandler) updateKeycloakUserTourAttribute(userID string, completed b
 	if err != nil {
 		return err
 	}
-	        defer func() { _ = getResp.Body.Close() }()
-	        if getResp.StatusCode != http.StatusOK {
-	                if getResp.StatusCode == http.StatusUnauthorized {
-	                        a.adminTokenProvider.Invalidate()
-	                }
-	                body, _ := io.ReadAll(getResp.Body)
-	                return fmt.Errorf("keycloak fetch for update failed: %s", string(body))
-	        }
-	        var userRep map[string]any
-	        if err := json.NewDecoder(getResp.Body).Decode(&userRep); err != nil {
-	                return err
-	        }
-	        attrs, ok := userRep["attributes"].(map[string]any)
-	        if !ok || attrs == nil {
-	                attrs = map[string]any{}
-	        }
-	        val := "false"
-	        if completed {
-	                val = "true"
-	        }
-	        attrs["product_tour_completed"] = []string{val}
-	        userRep["attributes"] = attrs
-	        payload, err := json.Marshal(userRep)
-	        if err != nil {
-	                return err
-	        }
-	        putReq, _ := http.NewRequestWithContext(context.Background(), http.MethodPut, getURL, bytes.NewBuffer(payload))
-	        putReq.Header.Set("Authorization", authorizationPrefix+adminToken)
-	        putReq.Header.Set("Content-Type", "application/json")
-	        putResp, err := a.httpClient.Do(putReq)
-	        if err != nil {
-	                return err
-	        }
-	        defer func() { _ = putResp.Body.Close() }()
-	        if putResp.StatusCode != http.StatusNoContent {
-	                if putResp.StatusCode == http.StatusUnauthorized {
-	                        a.adminTokenProvider.Invalidate()
-	                }
-	                body, _ := io.ReadAll(putResp.Body)
-	                return fmt.Errorf("keycloak update failed: %s", string(body))
-	        }
-	        return nil
+	defer func() { _ = getResp.Body.Close() }()
+	if getResp.StatusCode != http.StatusOK {
+		if getResp.StatusCode == http.StatusUnauthorized {
+			a.adminTokenProvider.Invalidate()
+		}
+		body, _ := io.ReadAll(getResp.Body)
+		return fmt.Errorf("keycloak fetch for update failed: %s", string(body))
 	}
+	var userRep map[string]any
+	if err := json.NewDecoder(getResp.Body).Decode(&userRep); err != nil {
+		return err
+	}
+	attrs, ok := userRep["attributes"].(map[string]any)
+	if !ok || attrs == nil {
+		attrs = map[string]any{}
+	}
+	val := "false"
+	if completed {
+		val = "true"
+	}
+	attrs["product_tour_completed"] = []string{val}
+	userRep["attributes"] = attrs
+	payload, err := json.Marshal(userRep)
+	if err != nil {
+		return err
+	}
+	putReq, _ := http.NewRequestWithContext(context.Background(), http.MethodPut, getURL, bytes.NewBuffer(payload))
+	putReq.Header.Set("Authorization", authorizationPrefix+adminToken)
+	putReq.Header.Set("Content-Type", "application/json")
+	putResp, err := a.httpClient.Do(putReq)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = putResp.Body.Close() }()
+	if putResp.StatusCode != http.StatusNoContent {
+		if putResp.StatusCode == http.StatusUnauthorized {
+			a.adminTokenProvider.Invalidate()
+		}
+		body, _ := io.ReadAll(putResp.Body)
+		return fmt.Errorf("keycloak update failed: %s", string(body))
+	}
+	return nil
+}
 func (a *AuthHandler) isEmailVerifiedViaAdmin(userID string) (bool, error) {
 	var details keycloakUserDetails
 	if err := a.fetchKeycloakUser(userID, &details); err != nil {

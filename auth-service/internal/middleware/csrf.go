@@ -7,11 +7,12 @@ import (
 	"net/http"
 	"time"
 
+	"platform.local/common/pkg/httputil"
+
 	"github.com/gin-gonic/gin"
 )
 
 const (
-	httpsScheme    = "https"
 	csrfHeaderName = "X-CSRF-Token"
 )
 
@@ -89,38 +90,12 @@ func rotateCSRFTokenIfNeeded(c *gin.Context) {
 	}
 
 	newToken := GenerateCSRFToken()
-	domain := getCookieDomain()
-	isSecure := determineSecure(c)
 
 	// HttpOnly is intentionally set to false for CSRF tokens
 	// because JavaScript must read this cookie to include it in the X-CSRF-Token header.
 	// This is required for the double-submit cookie CSRF protection pattern.
-	cookie := &http.Cookie{
-		Name:     "csrf_token",
-		Value:    newToken,
-		MaxAge:   csrfConfig.CookieMaxAge,
-		Path:     "/",
-		Domain:   domain,
-		Secure:   isSecure,
-		HttpOnly: false,
-		SameSite: http.SameSiteLaxMode,
-	}
-	http.SetCookie(c.Writer, cookie)
+	httputil.SetAuthCookie(c, csrfCookieOptions(csrfConfig), "csrf_token", newToken, csrfConfig.CookieMaxAge, false)
 	c.Header(csrfHeaderName, newToken)
-}
-
-func getCookieDomain() string {
-	domain := csrfConfig.CookieDomain
-	if domain == "localhost" || domain == "" {
-		return ""
-	}
-	return domain
-}
-
-func determineSecure(c *gin.Context) bool {
-	return csrfConfig.IsProduction ||
-		c.Request.Header.Get("X-Forwarded-Proto") == httpsScheme ||
-		c.Request.TLS != nil
 }
 
 func GenerateCSRFToken() string {
@@ -132,27 +107,15 @@ func GenerateCSRFToken() string {
 }
 
 func SetCSRFTokenCookie(c *gin.Context, token string, config *CSRFConfig) {
-	isSecure := config.IsProduction ||
-		c.Request.Header.Get("X-Forwarded-Proto") == httpsScheme ||
-		c.Request.TLS != nil
-
-	domain := config.CookieDomain
-	if domain == "localhost" || domain == "" {
-		domain = ""
-	}
-
 	// HttpOnly is intentionally set to false for CSRF tokens
 	// because JavaScript must read this cookie to include it in the X-CSRF-Token header.
 	// This is required for the double-submit cookie CSRF protection pattern.
-	cookie := &http.Cookie{
-		Name:     "csrf_token",
-		Value:    token,
-		MaxAge:   config.CookieMaxAge,
-		Path:     "/",
-		Domain:   domain,
-		Secure:   isSecure,
-		HttpOnly: false,
-		SameSite: http.SameSiteLaxMode,
+	httputil.SetAuthCookie(c, csrfCookieOptions(config), "csrf_token", token, config.CookieMaxAge, false)
+}
+
+func csrfCookieOptions(config *CSRFConfig) httputil.CookieOptions {
+	return httputil.CookieOptions{
+		Domain:       config.CookieDomain,
+		IsProduction: config.IsProduction,
 	}
-	http.SetCookie(c.Writer, cookie)
 }

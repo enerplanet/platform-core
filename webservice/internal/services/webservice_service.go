@@ -450,6 +450,58 @@ func (s *WebserviceService) GetSummary(ctx context.Context) (map[string]interfac
 	}, nil
 }
 
+func (s *WebserviceService) GetAvailableStaticDates(ctx context.Context) ([]string, error) {
+	var instance models.WebserviceInstance
+	if err := s.db.
+		Where("status = ?", models.StatusActive).
+		Order("available DESC, current_concurrency ASC, id ASC").
+		First(&instance).Error; err != nil {
+		return nil, err
+	}
+
+	url := buildURL(&instance, "/available-static-dates")
+	status, _, respBytes, err := s.doJSON(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if status < 200 || status >= 300 {
+		return nil, fmt.Errorf("request failed with status %d: %s", status, string(respBytes))
+	}
+
+	var result struct {
+		Dates []string `json:"dates"`
+	}
+	if err := json.Unmarshal(respBytes, &result); err != nil {
+		return nil, fmt.Errorf("invalid available static dates response: %w", err)
+	}
+	return result.Dates, nil
+}
+
+func (s *WebserviceService) GetAvailableDataCoverage(ctx context.Context) (map[string]interface{}, error) {
+	var instance models.WebserviceInstance
+	if err := s.db.
+		Where("status = ?", models.StatusActive).
+		Order("available DESC, current_concurrency ASC, id ASC").
+		First(&instance).Error; err != nil {
+		return nil, err
+	}
+
+	url := buildURL(&instance, "/available-data-coverage")
+	status, _, respBytes, err := s.doJSON(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if status < 200 || status >= 300 {
+		return nil, fmt.Errorf("request failed with status %d: %s", status, string(respBytes))
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(respBytes, &result); err != nil {
+		return nil, fmt.Errorf("invalid available data coverage response: %w", err)
+	}
+	return result, nil
+}
+
 func (s *WebserviceService) ReleaseInstance(ctx context.Context, id uint) error {
 	log := logger.ForComponent("webservice")
 
