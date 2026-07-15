@@ -103,7 +103,7 @@ func Load() (*Config, error) {
 			StuckModelTimeoutMinutes: stuckModelTimeoutMinutes,
 		},
 		Backend: BackendConfig{
-			URL:            platformconfig.GetEnv("BACKEND_INTERNAL_URL", "http://app-backend:8000"),
+			URL:            platformconfig.GetEnv("BACKEND_INTERNAL_URL", "http://localhost:8000"),
 			CallbackSecret: platformconfig.GetEnv("CALLBACK_SECRET", ""),
 		},
 	}
