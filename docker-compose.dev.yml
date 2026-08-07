@@ -20,3 +20,6 @@ services:
   webservice:
     environment:
       KEYCLOAK_URL: http://keycloak:8080/keycloak
+  redis:
+    ports:
+      - "127.0.0.1:6379:6379"

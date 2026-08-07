@@ -24,8 +24,7 @@ services:
     image: redis:7-alpine
     container_name: redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
     networks:
       - spatialhub-net
 
@@ -109,6 +108,7 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
       KEYCLOAK_URL: ${KEYCLOAK_ISSUER_URL:-http://keycloak:8080/keycloak}
     depends_on:
       postgres:
@@ -132,12 +132,17 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
       KEYCLOAK_URL: ${KEYCLOAK_ISSUER_URL:-http://keycloak:8080/keycloak}
       # Backend internal lifecycle API — the backend is the sole writer of
       # Model.status; the webservice requests transitions over this URL.
       # CALLBACK_SECRET must match the backend's value.
       BACKEND_INTERNAL_URL: ${BACKEND_INTERNAL_URL:-http://app-backend:8000}
       CALLBACK_SECRET: ${CALLBACK_SECRET:-}
+    extra_hosts:
+      # Reach a backend running on the Docker host (e.g. `go run` on :8000)
+      # via http://host.docker.internal:8000.
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy

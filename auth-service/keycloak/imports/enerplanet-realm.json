@@ -1,5 +1,5 @@
 {
-  "realm": "spatialhub",
+  "realm": "enerplanet",
   "enabled": true,
   "registrationAllowed": true,
   "registrationEmailAsUsername": true,
@@ -9,11 +9,11 @@
   "resetPasswordAllowed": true,
   "editUsernameAllowed": false,
   "bruteForceProtected": true,
-  "displayName": "enerplanet Application",
+  "displayName": "EnerPlanET",
   "displayNameHtml": "<div class=\"kc-logo-text\"><span>EnerPlanET</span></div>",
-  "loginTheme": "spatialhub",
-  "emailTheme": "spatialhub",
-  "accountTheme": "spatialhub",
+  "loginTheme": "enerplanet",
+  "emailTheme": "enerplanet",
+  "accountTheme": "enerplanet",
   "adminTheme": "keycloak.v2",
   "accessTokenLifespan": 3600,
   "accessTokenLifespanForImplicitFlow": 3600,
@@ -23,7 +23,7 @@
   "offlineSessionMaxLifespanEnabled": false,
   "clients": [
     {
-      "clientId": "spatialhub",
+      "clientId": "enerplanet",
       "name": "enerplanet Application",
       "description": "Main application client for enerplanet wildfire monitoring system",
       "enabled": true,

@@ -21,9 +21,6 @@ type UserRegistration struct {
 	Email                string `json:"email"`
 	Password             string `json:"password"`
 	PasswordConfirmation string `json:"password_confirmation"`
-	Organization         string `json:"organization"`
-	Position             string `json:"position"`
-	Phone                string `json:"phone"`
 	AccessLevel          string `json:"access_level"` // very_low | intermediate | expert
 }
 
@@ -47,9 +44,6 @@ func (u *UserRegistration) Validate() map[string]string {
 func (u *UserRegistration) ToKeycloakPayload() map[string]any {
 	attributes := map[string][]string{
 		"fullName":     {u.Name},
-		"organization": {u.Organization},
-		"position":     {u.Position},
-		"phone":        {u.Phone},
 		"access_level": {u.AccessLevel},
 	}
 
@@ -303,8 +297,6 @@ func (a *AuthHandler) sendRegistrationSuccessResponse(c *gin.Context, user *User
 		"user": gin.H{
 			"email":        user.Email,
 			"name":         user.Name,
-			"organization": user.Organization,
-			"position":     user.Position,
 			"access_level": user.AccessLevel,
 		},
 	})
