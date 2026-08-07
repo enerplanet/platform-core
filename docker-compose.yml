@@ -3,7 +3,7 @@ services:
     image: pgrouting/pgrouting:17-3.5-3.7.3
     container_name: postgres
     restart: unless-stopped
-    shm_size: '2gb'
+    shm_size: "2gb"
     ports:
       - "5433:5432"
     environment:
@@ -49,7 +49,10 @@ services:
       KC_PROXY_HEADERS: "xforwarded"
       KC_HTTP_RELATIVE_PATH: /keycloak
     volumes:
-      - ./auth-service/keycloak/storcito:/opt/keycloak/themes/spatialhub:ro
+      # Per-brand Keycloak themes.
+      - ./auth-service/keycloak/themes/enerplanet:/opt/keycloak/themes/enerplanet:ro
+      - ./auth-service/keycloak/themes/storcito:/opt/keycloak/themes/storcito:ro
+      - ./auth-service/keycloak/themes/enerplanet:/opt/keycloak/themes/spatialhub:ro
     command: start-dev
     depends_on:
       postgres:
@@ -77,6 +80,7 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
       SERVER_URL: ${SERVER_URL:-http://localhost:8000}
       KEYCLOAK_URL: http://keycloak:8080/keycloak
+      # --- Per-brand realm provisioning --------------------------------------#
     entrypoint: /bin/sh
     command:
       - -c
@@ -105,7 +109,7 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       REDIS_HOST: redis
-      KEYCLOAK_URL: http://keycloak:8080/keycloak
+      KEYCLOAK_URL: ${KEYCLOAK_ISSUER_URL:-http://keycloak:8080/keycloak}
     depends_on:
       postgres:
         condition: service_healthy
@@ -128,7 +132,12 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       REDIS_HOST: redis
-      KEYCLOAK_URL: http://keycloak:8080/keycloak
+      KEYCLOAK_URL: ${KEYCLOAK_ISSUER_URL:-http://keycloak:8080/keycloak}
+      # Backend internal lifecycle API — the backend is the sole writer of
+      # Model.status; the webservice requests transitions over this URL.
+      # CALLBACK_SECRET must match the backend's value.
+      BACKEND_INTERNAL_URL: ${BACKEND_INTERNAL_URL:-http://app-backend:8000}
+      CALLBACK_SECRET: ${CALLBACK_SECRET:-}
     depends_on:
       postgres:
         condition: service_healthy

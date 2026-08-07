@@ -14,8 +14,9 @@ import (
 )
 
 var (
-	sessionCookieMaxAge int
-	sessionCookieDomain string
+	sessionCookieMaxAge       int
+	sessionCookieDomain       string
+	sessionCookieIsProduction bool
 )
 
 // Auth service specific public paths
@@ -109,6 +110,11 @@ func SetSessionCookieDomain(domain string) {
 	sessionCookieDomain = domain
 }
 
+// SetSessionCookieIsProduction sets whether refreshed session cookies require Secure.
+func SetSessionCookieIsProduction(isProduction bool) {
+	sessionCookieIsProduction = isProduction
+}
+
 // SessionRefreshMiddleware refreshes session TTL on successful requests
 func SessionRefreshMiddleware(sessionStore platformsession.SessionStore) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -135,15 +141,10 @@ func SessionRefreshMiddleware(sessionStore platformsession.SessionStore) gin.Han
 		}
 
 		if sessionCookieMaxAge > 0 {
-			c.SetCookie(
-				"session_id",
-				sessionID,
-				sessionCookieMaxAge,
-				"/",
-				sessionCookieDomain,
-				true,
-				true,
-			)
+			httputil.SetAuthCookie(c, httputil.CookieOptions{
+				Domain:       sessionCookieDomain,
+				IsProduction: sessionCookieIsProduction,
+			}, "session_id", sessionID, sessionCookieMaxAge, true)
 		}
 	}
 }

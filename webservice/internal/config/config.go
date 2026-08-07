@@ -18,6 +18,13 @@ type Config struct {
 	Redis       goredis.Options
 	Dispatch    DispatchConfig
 	Scheduler   SchedulerConfig
+	Backend     BackendConfig
+}
+
+// BackendConfig points the webservice at the backend's internal lifecycle API.
+type BackendConfig struct {
+	URL            string
+	CallbackSecret string
 }
 
 type DispatchConfig struct {
@@ -94,6 +101,10 @@ func Load() (*Config, error) {
 		Scheduler: SchedulerConfig{
 			IntervalSeconds:          schedulerIntervalSeconds,
 			StuckModelTimeoutMinutes: stuckModelTimeoutMinutes,
+		},
+		Backend: BackendConfig{
+			URL:            platformconfig.GetEnv("BACKEND_INTERNAL_URL", "http://localhost:8000"),
+			CallbackSecret: platformconfig.GetEnv("CALLBACK_SECRET", ""),
 		},
 	}
 

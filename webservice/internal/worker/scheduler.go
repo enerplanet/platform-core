@@ -9,8 +9,10 @@ import (
 
 	"gorm.io/gorm"
 
+	"platform.local/common/pkg/contracts"
 	"platform.local/common/pkg/models"
 	"platform.local/platform/logger"
+	"spatialhub_webservice/internal/backendclient"
 	"spatialhub_webservice/internal/services"
 	"spatialhub_webservice/internal/store"
 )
@@ -18,6 +20,7 @@ import (
 type Scheduler struct {
 	db                *gorm.DB
 	wsService         *services.WebserviceService
+	backend           backendclient.Lifecycle
 	ticker            *time.Ticker
 	done              chan bool
 	stuckModelTimeout time.Duration
@@ -37,13 +40,14 @@ func stringOrEmpty(val *string) string {
 	return *val
 }
 
-func NewScheduler(db *gorm.DB, stuckModelTimeout time.Duration) *Scheduler {
+func NewScheduler(db *gorm.DB, stuckModelTimeout time.Duration, backend backendclient.Lifecycle) *Scheduler {
 	if stuckModelTimeout <= 0 {
 		stuckModelTimeout = 2 * time.Hour
 	}
 	return &Scheduler{
 		db:                db,
 		wsService:         services.NewWebserviceService(db),
+		backend:           backend,
 		done:              make(chan bool),
 		stuckModelTimeout: stuckModelTimeout,
 	}
@@ -96,7 +100,6 @@ func (s *Scheduler) runTasks() {
 		log.Errorf("failed to check stuck models: %v", err)
 	}
 }
-
 
 func (s *Scheduler) checkWebserviceStatuses() error {
 	ctx := context.Background()
@@ -179,54 +182,43 @@ func (s *Scheduler) checkWebserviceStatuses() error {
 	return nil
 }
 
+// checkModelsOnOfflineWebservices fails models whose compute instance went offline.
 func (s *Scheduler) checkModelsOnOfflineWebservices() error {
 	ctx := context.Background()
 	log := logger.ForComponent("scheduler")
 
-	var runningModels []models.Model
-	if err := s.db.Where("status IN (?) AND webservice_id IS NOT NULL",
-		[]string{models.ModelStatusRunning, models.ModelStatusQueue}).
-		Find(&runningModels).Error; err != nil {
+	active, err := s.backend.ActiveModels(ctx)
+	if err != nil {
 		return err
 	}
 
-	if len(runningModels) == 0 {
-		return nil
-	}
-
-	for _, model := range runningModels {
+	for _, m := range active {
+		if m.WebserviceID == nil {
+			continue
+		}
 		var ws models.WebserviceInstance
-		if err := s.db.First(&ws, *model.WebserviceID).Error; err != nil {
+		if err := s.db.First(&ws, *m.WebserviceID).Error; err != nil {
 			log.Warnf("model using non-existent webservice model_id=%d webservice_id=%d",
-				model.ID, *model.WebserviceID)
+				m.ModelID, *m.WebserviceID)
 			continue
 		}
 
 		if ws.Status != models.StatusActive {
 			log.Warnf("failing model on offline webservice model_id=%d webservice_id=%d webservice_status=%s",
-				model.ID, ws.ID, ws.Status)
+				m.ModelID, ws.ID, ws.Status)
 
-			now := time.Now().UTC()
 			errorMessage := fmt.Sprintf("Calculation interrupted - webservice %d went offline", ws.ID)
-			if err := s.db.Model(&model).Updates(map[string]interface{}{
-				"status":                   models.ModelStatusFailed,
-				"webservice_id":            nil,
-				"calculation_completed_at": now,
-				"updated_at":               now,
-				"results": map[string]interface{}{
-					"error": errorMessage,
-				},
-			}).Error; err != nil {
-				log.Errorf("failed to mark model as failed model_id=%d err=%v", model.ID, err)
+			if err := s.backend.MarkFailed(ctx, m.ModelID, errorMessage); err != nil {
+				log.Errorf("failed to mark model as failed model_id=%d err=%v", m.ModelID, err)
 				continue
 			}
 
 			if err := s.wsService.ReleaseInstance(ctx, ws.ID); err != nil {
 				log.Errorf("failed to release webservice model_id=%d webservice_id=%d err=%v",
-					model.ID, ws.ID, err)
+					m.ModelID, ws.ID, err)
 			} else {
 				log.Infof("released webservice for model on offline service model_id=%d webservice_id=%d",
-					model.ID, ws.ID)
+					m.ModelID, ws.ID)
 			}
 		}
 	}
@@ -234,8 +226,20 @@ func (s *Scheduler) checkModelsOnOfflineWebservices() error {
 	return nil
 }
 
+// fixStuckConcurrency corrects each instance's concurrency counter against the backend's active-model count.
 func (s *Scheduler) fixStuckConcurrency() error {
 	log := logger.ForComponent("scheduler")
+
+	active, err := s.backend.ActiveModels(context.Background())
+	if err != nil {
+		return err
+	}
+	counts := make(map[uint]int)
+	for _, m := range active {
+		if m.WebserviceID != nil {
+			counts[*m.WebserviceID]++
+		}
+	}
 
 	var webservices []models.WebserviceInstance
 	if err := s.db.Find(&webservices).Error; err != nil {
@@ -243,13 +247,8 @@ func (s *Scheduler) fixStuckConcurrency() error {
 	}
 
 	for _, ws := range webservices {
-		// Reconcile DB counter with actual queued/running models.
-		var actualCount int64
-		s.db.Model(&models.Model{}).
-			Where("webservice_id = ? AND status IN (?)", ws.ID, []string{models.ModelStatusQueue, models.ModelStatusRunning}).
-			Count(&actualCount)
-
-		if int(actualCount) != ws.CurrentConcurrency {
+		actualCount := counts[ws.ID]
+		if actualCount != ws.CurrentConcurrency {
 			log.Warnf("webservice id=%d has inconsistent concurrency: DB shows %d, actual models: %d - fixing",
 				ws.ID, ws.CurrentConcurrency, actualCount)
 
@@ -268,56 +267,42 @@ func (s *Scheduler) fixStuckConcurrency() error {
 	return nil
 }
 
+// checkStuckModels fails models that have been running past the timeout.
 func (s *Scheduler) checkStuckModels() error {
 	ctx := context.Background()
 	log := logger.ForComponent("scheduler")
 
-	// Timeout is based on calculation start time, not last update timestamp.
 	timeout := s.stuckModelTimeout
 	cutoffTime := time.Now().Add(-timeout)
 
-	var stuckModels []models.Model
-	if err := s.db.Where("status = ? AND calculation_started_at IS NOT NULL AND calculation_started_at < ?", models.ModelStatusRunning, cutoffTime).
-		Find(&stuckModels).Error; err != nil {
+	active, err := s.backend.ActiveModels(ctx)
+	if err != nil {
 		return err
 	}
 
-	if len(stuckModels) == 0 {
-		return nil
-	}
-
-	log.Warnf("found %d stuck models (running > %v)", len(stuckModels), timeout)
-
-	for _, model := range stuckModels {
-		runningSince := model.UpdatedAt
-		if model.CalculationStartedAt != nil {
-			runningSince = *model.CalculationStartedAt
+	for _, m := range active {
+		if m.Status != contracts.StatusRunning {
+			continue
+		}
+		if m.CalculationStartedAt == nil || !m.CalculationStartedAt.Before(cutoffTime) {
+			continue
 		}
 		log.Warnf("marking stuck model as failed model_id=%d webservice_id=%v age=%v",
-			model.ID, model.WebserviceID, time.Since(runningSince))
+			m.ModelID, m.WebserviceID, time.Since(*m.CalculationStartedAt))
 
-		now := time.Now().UTC()
 		errorMessage := fmt.Sprintf("Calculation timed out - exceeded maximum running time (%v)", timeout)
-		if err := s.db.Model(&model).Updates(map[string]interface{}{
-			"status":                   models.ModelStatusFailed,
-			"webservice_id":            nil,
-			"calculation_completed_at": now,
-			"updated_at":               now,
-			"results": map[string]interface{}{
-				"error": errorMessage,
-			},
-		}).Error; err != nil {
-			log.Errorf("failed to update stuck model model_id=%d err=%v", model.ID, err)
+		if err := s.backend.MarkFailed(ctx, m.ModelID, errorMessage); err != nil {
+			log.Errorf("failed to update stuck model model_id=%d err=%v", m.ModelID, err)
 			continue
 		}
 
-		if model.WebserviceID != nil {
-			if err := s.wsService.ReleaseInstance(ctx, *model.WebserviceID); err != nil {
+		if m.WebserviceID != nil {
+			if err := s.wsService.ReleaseInstance(ctx, *m.WebserviceID); err != nil {
 				log.Errorf("failed to release webservice model_id=%d webservice_id=%d err=%v",
-					model.ID, *model.WebserviceID, err)
+					m.ModelID, *m.WebserviceID, err)
 			} else {
 				log.Infof("released webservice for stuck model model_id=%d webservice_id=%d",
-					model.ID, *model.WebserviceID)
+					m.ModelID, *m.WebserviceID)
 			}
 		}
 	}

@@ -499,6 +499,24 @@ func (h *WebserviceHandler) GetSummary(c *gin.Context) {
 	httputil.SuccessResponse(c, summary)
 }
 
+func (h *WebserviceHandler) GetAvailableStaticDates(c *gin.Context) {
+	dates, err := h.service.GetAvailableStaticDates(c.Request.Context())
+	if err != nil {
+		httputil.HandleError(c, err)
+		return
+	}
+	httputil.SuccessResponse(c, gin.H{"dates": dates})
+}
+
+func (h *WebserviceHandler) GetAvailableDataCoverage(c *gin.Context) {
+	coverage, err := h.service.GetAvailableDataCoverage(c.Request.Context())
+	if err != nil {
+		httputil.HandleError(c, err)
+		return
+	}
+	httputil.SuccessResponse(c, coverage)
+}
+
 // Heartbeat updates last_heartbeat for a webservice instance
 func (h *WebserviceHandler) Heartbeat(c *gin.Context) {
 	id, ok := httputil.ParseUintParam(c, "id", errInvalidID)

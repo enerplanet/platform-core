@@ -24,6 +24,7 @@ import (
 
 	_ "go.uber.org/automaxprocs"
 
+	"spatialhub_webservice/internal/backendclient"
 	"spatialhub_webservice/internal/config"
 	webhandler "spatialhub_webservice/internal/handler/webservice"
 	"spatialhub_webservice/internal/middleware"
@@ -116,7 +117,9 @@ func mustInitDependencies(cfg *config.Config, log *logrus.Logger) *appDependenci
 		},
 	})
 
-	taskProcessor := worker.NewTaskProcessor(db, cfg.Dispatch.CpuThresholdPercent)
+	backendLifecycle := backendclient.New(cfg.Backend.URL, cfg.Backend.CallbackSecret)
+
+	taskProcessor := worker.NewTaskProcessor(db, cfg.Dispatch.CpuThresholdPercent, backendLifecycle)
 	mux := asynq.NewServeMux()
 	mux.HandleFunc("dispatch_model_calculation", taskProcessor.ProcessTask)
 
@@ -126,7 +129,7 @@ func mustInitDependencies(cfg *config.Config, log *logrus.Logger) *appDependenci
 		}
 	}()
 
-	scheduler := worker.NewScheduler(db, time.Duration(cfg.Scheduler.StuckModelTimeoutMinutes)*time.Minute)
+	scheduler := worker.NewScheduler(db, time.Duration(cfg.Scheduler.StuckModelTimeoutMinutes)*time.Minute, backendLifecycle)
 	scheduler.Start(time.Duration(cfg.Scheduler.IntervalSeconds) * time.Second)
 
 	return &appDependencies{
@@ -207,6 +210,8 @@ func registerRoutes(r *gin.Engine, deps *appDependencies) {
 		wsHandler := webhandler.NewWebserviceHandler(deps.DB)
 		api.POST("/webservices", wsHandler.CreateWebservice)
 		api.GET("/webservices", wsHandler.GetWebserviceList)
+		api.GET("/webservices/available-static-dates", wsHandler.GetAvailableStaticDates)
+		api.GET("/webservices/available-data-coverage", wsHandler.GetAvailableDataCoverage)
 		api.GET("/webservices/:id", wsHandler.GetWebserviceByID)
 		api.PUT("/webservices/:id", wsHandler.UpdateWebservice)
 		api.DELETE("/webservices/:id", wsHandler.DeleteWebservice)

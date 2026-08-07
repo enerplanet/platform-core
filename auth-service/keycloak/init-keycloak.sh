@@ -39,8 +39,15 @@ fi
 KEYCLOAK_URL="${KEYCLOAK_URL:-http://keycloak:8080}"
 ADMIN_USER="${KEYCLOAK_ADMIN_USER:-admin}"
 ADMIN_PASS="${KEYCLOAK_ADMIN_PASSWORD:-admin}"
-REALM_NAME="spatialhub"
-CLIENT_ID="${KEYCLOAK_CLIENT_ID:-spatialhub}"
+# Per-brand realm support. Set REALM_NAME / KEYCLOAK_CLIENT_ID / REALM_FILE in the
+# environment to provision a specific brand realm (e.g. enerplanet, storcito).
+# Defaults preserve the legacy single-realm ("spatialhub") behaviour.
+REALM_NAME="${REALM_NAME:-spatialhub}"
+CLIENT_ID="${KEYCLOAK_CLIENT_ID:-$REALM_NAME}"
+REALM_FILE="${REALM_FILE:-/opt/keycloak/data/import/imports/keycloak-realm.json}"
+if [ ! -f "$REALM_FILE" ] && [ -f "/opt/keycloak/data/import/keycloak-realm.json" ]; then
+  REALM_FILE="/opt/keycloak/data/import/keycloak-realm.json"
+fi
 
 echo "Configuration:"
 echo "  Keycloak URL: $KEYCLOAK_URL"
@@ -129,11 +136,7 @@ ensure_service_account_roles() {
 }
 
 update_user_profile_configuration() {
-  # Try both possible paths for the realm file
-  local realm_file="/opt/keycloak/data/import/imports/keycloak-realm.json"
-  if [ ! -f "$realm_file" ]; then
-    realm_file="/opt/keycloak/data/import/keycloak-realm.json"
-  fi
+  local realm_file="$REALM_FILE"
 
   if [ ! -f "$realm_file" ]; then
     echo "WARNING: Could not find realm file for user profile configuration"
@@ -309,10 +312,7 @@ if [ "$HTTP_CODE" = "200" ]; then
   echo "✓ Realm '$REALM_NAME' already exists - updating realm settings, client URLs and retrieving secret"
 
   # Update realm settings from JSON if file exists
-  REALM_JSON_FILE="/opt/keycloak/data/import/imports/keycloak-realm.json"
-  if [ ! -f "$REALM_JSON_FILE" ]; then
-    REALM_JSON_FILE="/opt/keycloak/data/import/keycloak-realm.json"
-  fi
+  REALM_JSON_FILE="$REALM_FILE"
 
   if [ -f "$REALM_JSON_FILE" ]; then
     echo "Updating realm settings from $REALM_JSON_FILE..."
@@ -493,8 +493,8 @@ if [ "$HTTP_CODE" = "200" ]; then
 else
   echo "==> Realm '$REALM_NAME' does not exist (HTTP $HTTP_CODE) - importing..."
 
-  if [ ! -f /opt/keycloak/data/import/imports/keycloak-realm.json ]; then
-    echo "ERROR: Realm file not found at /opt/keycloak/data/import/imports/keycloak-realm.json"
+  if [ ! -f "$REALM_FILE" ]; then
+    echo "ERROR: Realm file not found at $REALM_FILE"
     echo "Listing files in /opt/keycloak/data/import/imports/:"
     ls -la /opt/keycloak/data/import/imports/ || echo "Directory not accessible"
     exit 1
@@ -504,7 +504,7 @@ else
   echo "Using server URL: $SERVER_URL"
 
   echo "Updating URLs in realm configuration..."
-  cp /opt/keycloak/data/import/imports/keycloak-realm.json /tmp/keycloak-realm-updated.json
+  cp "$REALM_FILE" /tmp/keycloak-realm-updated.json
 
   sed -i "s|http://localhost:8000|$SERVER_URL|g" /tmp/keycloak-realm-updated.json
   sed -i "s|http://localhost:3000|$SERVER_URL|g" /tmp/keycloak-realm-updated.json

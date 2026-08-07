@@ -139,6 +139,7 @@ func setupGinEngine(cfg *config.Config, log *logrus.Logger) *gin.Engine {
 
 	middleware.SetSessionCookieMaxAge(cfg.SessionTTLMinutes * 60)
 	middleware.SetSessionCookieDomain(cfg.CookieDomain)
+	middleware.SetSessionCookieIsProduction(cfg.AppEnv == "production")
 
 	return r
 }
@@ -192,6 +193,7 @@ func configureAuthRoutes(r *gin.Engine, cfg *config.Config, deps *AppDependencie
 		protected.Use(sessionValidator, sessionRefresh)
 		{
 			protected.POST("/auth/refresh-token", authHandler.RefreshToken)
+			protected.POST("/auth/change-password", authHandler.ChangePassword)
 			protected.GET("/auth/tour-status", authHandler.GetTourStatus)
 			protected.POST("/auth/complete-tour", authHandler.CompleteTour)
 			protected.GET("/auth/keep-alive", authHandler.KeepAlive)
