@@ -28,6 +28,26 @@ services:
     networks:
       - spatialhub-net
 
+  timescaledb:
+    image: timescale/timescaledb:latest-pg18
+    container_name: timescaledb
+    restart: unless-stopped
+    ports:
+      - "6543:5432"
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${TS_DB_DATABASE:-timeseries}
+    volumes:
+      - timescaledb-data:/var/lib/postgresql
+    networks:
+      - spatialhub-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   keycloak:
     image: quay.io/keycloak/keycloak:26.0.6
     container_name: keycloak
@@ -174,6 +194,7 @@ services:
 
 volumes:
   postgres-data:
+  timescaledb-data:
 
 networks:
   spatialhub-net:
