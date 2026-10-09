@@ -73,7 +73,6 @@ services:
       - ../enerplanet/backend:/backend-config
       - ./auth-service:/auth-service-config
       - ./webservice:/webservice-config
-      - ./geoserver:/geoserver-config
     environment:
       KEYCLOAK_ADMIN_USER: ${KEYCLOAK_ADMIN_USER:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
@@ -143,27 +142,6 @@ services:
       # Reach a backend running on the Docker host (e.g. `go run` on :8000)
       # via http://host.docker.internal:8000.
       - "host.docker.internal:host-gateway"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      keycloak-init:
-        condition: service_completed_successfully
-    networks:
-      - spatialhub-net
-
-  geoservice:
-    build:
-      context: ..
-      dockerfile: platform-core/geoserver/Dockerfile
-    container_name: geoservice
-    restart: unless-stopped
-    env_file:
-      - ./geoserver/.env
-    ports:
-      - "8083:8083"
-    environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
     depends_on:
       postgres:
         condition: service_healthy
